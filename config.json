@@ -1,0 +1,33 @@
+{
+  "max_seconds": 18000,
+  "sound": false,
+  "tasks": [
+    {
+      "enabled": true,
+      "cmds": [
+        "$p"
+      ],
+      "lo": 180,
+      "hi": 234,
+      "on_start": true
+    },
+    {
+      "enabled": false,
+      "cmds": [
+        "$correr"
+      ],
+      "lo": 7200,
+      "hi": 7500,
+      "on_start": false
+    },
+    {
+      "enabled": false,
+      "cmds": [
+        "$presentear yor forger"
+      ],
+      "lo": 28800,
+      "hi": 29100,
+      "on_start": false
+    }
+  ]
+}
