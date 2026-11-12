@@ -5,23 +5,29 @@ Cada tarefa envia um comando (sorteado entre uma lista) num momento aleatório
 dentro de uma janela [mín, máx] de segundos. As tarefas ficam em config.json
 (editável pela interface: gui.py). Também dá para rodar direto no terminal:
 
-    caffeinate -dimsu python3 macro.py
+    python3 macro.py
 
-Usa o Quick Switcher do Discord (Cmd+K) e o osascript do macOS. Só usa a
-biblioteca padrão. Parar: Ctrl+C.
+Usa o Quick Switcher do Discord (Cmd+K / Ctrl+K), com osascript no macOS e
+windows.py no Windows. Só usa a biblioteca padrão. Parar: Ctrl+C.
 """
 from __future__ import annotations
 
 import json
 import random
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
+
+IS_WINDOWS = sys.platform == "win32"
+if IS_WINDOWS:
+    import windows
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
-QUICK_SWITCH_QUERY = "#fisherman guifons"  # texto digitado no Cmd+K
+QUICK_SWITCH_QUERY = "#fisherman guifons"  # texto digitado no Cmd+K / Ctrl+K
 MIN = 60
 
 DEFAULT_CONFIG = {
@@ -36,13 +42,13 @@ DEFAULT_CONFIG = {
 
 def load_config() -> dict:
     try:
-        return json.loads(CONFIG_PATH.read_text())
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return json.loads(json.dumps(DEFAULT_CONFIG))
 
 
 def save_config(config: dict) -> None:
-    CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False))
+    CONFIG_PATH.write_text(json.dumps(config, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def osa(script: str) -> None:
@@ -50,6 +56,9 @@ def osa(script: str) -> None:
 
 
 def send_command(cmd: str) -> None:
+    if IS_WINDOWS:
+        windows.send_command(cmd, QUICK_SWITCH_QUERY)
+        return
     script = f'''
     set prevApp to (path to frontmost application as text)
     tell application "Discord" to activate
@@ -71,6 +80,21 @@ def send_command(cmd: str) -> None:
     tell application prevApp to activate
     '''
     osa(script)
+
+
+def keep_awake() -> Callable[[], None]:
+    """Impede o computador de dormir. Retorna a função que libera."""
+    if IS_WINDOWS:
+        windows.keep_awake(True)
+        return lambda: windows.keep_awake(False)
+    return subprocess.Popen(["caffeinate", "-dimsu"]).terminate
+
+
+def play_sound() -> None:
+    if IS_WINDOWS:
+        windows.play_sound()
+    else:
+        subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"])
 
 
 def fmt_secs(total: float) -> str:
@@ -121,7 +145,7 @@ class Runner(threading.Thread):
                         self.log(f"Enviado {cmd}")
                         if self.on_send:
                             self.on_send(cmd)
-                    except subprocess.CalledProcessError as e:
+                    except (subprocess.CalledProcessError, OSError) as e:
                         self.log(f"Falha ao enviar {cmd}: {e}")
                     delay = random.uniform(t["lo"], t["hi"])
                     self.next_run[i] = time.time() + delay
@@ -136,10 +160,13 @@ def main() -> None:
     config = load_config()
     tasks = [t for t in config["tasks"] if t.get("enabled", True)]
     runner = Runner(tasks, config.get("max_seconds", 0))
+    release_awake = keep_awake()
     try:
         runner.run()
     except KeyboardInterrupt:
         default_log("Parado.")
+    finally:
+        release_awake()
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import queue
-import subprocess
 import time
 import tkinter as tk
 from datetime import datetime
@@ -76,7 +75,7 @@ class App(tk.Tk):
         self.title("Macro Discord - Guifons Empire")
         self.resizable(False, False)
         self.runner: macro.Runner | None = None
-        self.caffeinate: subprocess.Popen | None = None
+        self.release_awake = None  # função que libera o computador para dormir
         self.logs: queue.Queue[str] = queue.Queue()
         self.rows: list[TaskRow] = []
         self.active_rows: list[TaskRow] = []
@@ -160,7 +159,7 @@ class App(tk.Tk):
 
     def play_sound(self, _cmd: str = "") -> None:
         if self.sound_on:
-            subprocess.Popen(["afplay", "/System/Library/Sounds/Glass.aiff"])
+            macro.play_sound()
 
     def collect(self) -> dict:
         tasks = [r.to_task() for r in self.rows]
@@ -191,8 +190,8 @@ class App(tk.Tk):
         if not tasks:
             messagebox.showwarning("Nada para rodar", "Ative pelo menos um comando.")
             return
-        # Mantém o Mac acordado e com a tela ativa enquanto o macro roda.
-        self.caffeinate = subprocess.Popen(["caffeinate", "-dimsu"])
+        # Mantém o computador acordado e com a tela ativa enquanto o macro roda.
+        self.release_awake = macro.keep_awake()
         self.runner = macro.Runner(tasks, config["max_seconds"], log=self.log, on_send=self.play_sound)
         self.runner.start()
         self.start_btn.config(state="disabled")
@@ -207,9 +206,9 @@ class App(tk.Tk):
 
     def finish(self) -> None:
         self.runner = None
-        if self.caffeinate:
-            self.caffeinate.terminate()
-            self.caffeinate = None
+        if self.release_awake:
+            self.release_awake()
+            self.release_awake = None
         self.start_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
         self.status.set("Parado")
@@ -237,8 +236,8 @@ class App(tk.Tk):
     def on_close(self) -> None:
         if self.runner:
             self.runner.stop()
-        if self.caffeinate:
-            self.caffeinate.terminate()
+        if self.release_awake:
+            self.release_awake()
         self.destroy()
 
 
